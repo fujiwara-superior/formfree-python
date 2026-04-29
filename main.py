@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 API_SECRET     = os.environ["INTERNAL_API_SECRET"]
 LARAVEL_URL    = os.environ.get("LARAVEL_URL", "http://laravel:8000")
 SUPABASE_URL   = os.environ["SUPABASE_URL"]
-SUPABASE_KEY   = os.environ["SUPABASE_KEY"]
+SUPA_SERVICE_KEY   = os.environ["SUPA_SERVICE_KEY"]
 
 converter_service = ConversionService(
     anthropic_api_key = os.environ["ANTHROPIC_API_KEY"],
     supabase_url      = SUPABASE_URL,
-    supabase_key      = SUPABASE_KEY,
+    supabase_key      = SUPA_SERVICE_KEY,
 )
 
 
@@ -134,8 +134,8 @@ async def update_job_status(job_id: str, status: str, error: str = None):
         await client.patch(
             f"{SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.{job_id}",
             headers={
-                "apikey":        SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "apikey":        SUPA_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPA_SERVICE_KEY}",
                 "Content-Type":  "application/json",
                 "Prefer":        "return=minimal",
             },
@@ -154,8 +154,8 @@ async def update_job_completed(job_id: str, row_count: int):
         await client.patch(
             f"{SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.{job_id}",
             headers={
-                "apikey":        SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "apikey":        SUPA_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPA_SERVICE_KEY}",
                 "Content-Type":  "application/json",
                 "Prefer":        "return=minimal",
             },
@@ -172,8 +172,8 @@ async def insert_conversion_rows(rows: list[dict]):
         await client.post(
             f"{SUPABASE_URL}/rest/v1/conversion_rows",
             headers={
-                "apikey":        SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "apikey":        SUPA_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPA_SERVICE_KEY}",
                 "Content-Type":  "application/json",
                 "Prefer":        "return=minimal",
             },
