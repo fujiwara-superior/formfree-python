@@ -21,9 +21,7 @@ logger = logging.getLogger(__name__)
 API_SECRET   = os.environ["INTERNAL_API_SECRET"]
 LARAVEL_URL  = os.environ.get("LARAVEL_URL", "http://laravel:8000")
 
-converter_service = ConversionService(
-    anthropic_api_key = os.environ["ANTHROPIC_API_KEY"],
-)
+converter_service = ConversionService()
 
 
 @asynccontextmanager
