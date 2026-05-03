@@ -28,7 +28,8 @@ converter_service = ConversionService(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("FormFree Python converter starting up")
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    logger.info(f"FormFree Python converter starting up | KEY_PREFIX={key[:15]}... LEN={len(key)}")
     yield
     logger.info("FormFree Python converter shutting down")
 
