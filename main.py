@@ -18,15 +18,11 @@ from converter import ConversionService
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-API_SECRET     = os.environ["INTERNAL_API_SECRET"]
-LARAVEL_URL    = os.environ.get("LARAVEL_URL", "http://laravel:8000")
-SUPABASE_URL   = os.environ["SUPABASE_URL"]
-SUPA_SERVICE_KEY   = os.environ["SUPA_SERVICE_KEY"]
+API_SECRET   = os.environ["INTERNAL_API_SECRET"]
+LARAVEL_URL  = os.environ.get("LARAVEL_URL", "http://laravel:8000")
 
 converter_service = ConversionService(
     anthropic_api_key = os.environ["ANTHROPIC_API_KEY"],
-    supabase_url      = SUPABASE_URL,
-    supabase_key      = SUPA_SERVICE_KEY,
 )
 
 
@@ -41,12 +37,12 @@ app = FastAPI(title="FormFree Converter", lifespan=lifespan)
 
 # ─── リクエストモデル ─────────────────────────────────────────
 class ConvertRequest(BaseModel):
-    job_id:           str
-    company_id:       str
-    pdf_storage_path: str
-    pdf_type:         str = "text"   # text / scan
-    columns:          list[dict]     # [{name, description}]
-    csv_encoding:     str = "sjis"
+    job_id:       str
+    company_id:   str
+    pdf_content:  str              # base64エンコードされたPDF
+    pdf_type:     str = "text"     # text / scan
+    columns:      list[dict]       # [{name, description}]
+    csv_encoding: str = "sjis"
 
 
 # ─── エンドポイント ───────────────────────────────────────────
@@ -75,13 +71,11 @@ async def run_conversion(req: ConvertRequest):
     logger.info(f"Starting conversion for job {req.job_id}")
 
     try:
-        # ① status → processing
-        await update_job_status(req.job_id, "processing")
+        # ① PDFをbase64デコード
+        import base64
+        pdf_bytes = base64.b64decode(req.pdf_content)
 
-        # ② PDFをSupabase Storageから取得
-        pdf_bytes = await converter_service.fetch_pdf(req.pdf_storage_path)
-
-        # ③ PDFタイプを自動判定
+        # ② PDFタイプを自動判定
         actual_type = converter_service.detect_pdf_type(pdf_bytes)
 
         # ④ Claude APIで変換
@@ -101,63 +95,6 @@ async def run_conversion(req: ConvertRequest):
     except Exception as e:
         logger.error(f"Job {req.job_id} failed: {e}", exc_info=True)
         await notify_laravel(req.job_id, "failed", error=str(e))
-
-
-# ─── Supabase操作 ─────────────────────────────────────────────
-async def update_job_status(job_id: str, status: str, error: str = None):
-    payload = {"status": status}
-    if error:
-        payload["error_message"] = error[:500]
-
-    async with httpx.AsyncClient() as client:
-        await client.patch(
-            f"{SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.{job_id}",
-            headers={
-                "apikey":        SUPA_SERVICE_KEY,
-                "Authorization": f"Bearer {SUPA_SERVICE_KEY}",
-                "Content-Type":  "application/json",
-                "Prefer":        "return=minimal",
-            },
-            json=payload,
-        )
-
-
-async def update_job_completed(job_id: str, row_count: int):
-    from datetime import datetime, timezone
-    payload = {
-        "status":       "completed",
-        "row_count":    row_count,
-        "completed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    async with httpx.AsyncClient() as client:
-        await client.patch(
-            f"{SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.{job_id}",
-            headers={
-                "apikey":        SUPA_SERVICE_KEY,
-                "Authorization": f"Bearer {SUPA_SERVICE_KEY}",
-                "Content-Type":  "application/json",
-                "Prefer":        "return=minimal",
-            },
-            json=payload,
-        )
-
-
-async def insert_conversion_rows(rows: list[dict]):
-    # rowsのdataをJSON文字列に変換
-    for row in rows:
-        row["data"] = json.dumps(row["data"], ensure_ascii=False)
-
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            f"{SUPABASE_URL}/rest/v1/conversion_rows",
-            headers={
-                "apikey":        SUPA_SERVICE_KEY,
-                "Authorization": f"Bearer {SUPA_SERVICE_KEY}",
-                "Content-Type":  "application/json",
-                "Prefer":        "return=minimal",
-            },
-            json=rows,
-        )
 
 
 async def notify_laravel(job_id: str, status: str,

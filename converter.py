@@ -13,7 +13,6 @@ import logging
 from typing import Any
 
 import anthropic
-import httpx
 import pdfplumber
 from pdf2image import convert_from_bytes
 
@@ -70,25 +69,8 @@ AUTO_DETECT_SYSTEM_PROMPT = """あなたはPDF帳票からデータを自動検�
 
 
 class ConversionService:
-    def __init__(self, anthropic_api_key: str, supabase_url: str, supabase_key: str):
-        self.client       = anthropic.AsyncAnthropic(api_key=anthropic_api_key)
-        self.supabase_url = supabase_url
-        self.supabase_key = supabase_key
-
-    # ─── PDF取得 ──────────────────────────────────────────────
-    async def fetch_pdf(self, storage_path: str) -> bytes:
-        """Supabase StorageからPDFを取得"""
-        url = f"{self.supabase_url}/storage/v1/object/pdfs/{storage_path}"
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.get(
-                url,
-                headers={
-                    "apikey":        self.supabase_key,
-                    "Authorization": f"Bearer {self.supabase_key}",
-                },
-            )
-            resp.raise_for_status()
-            return resp.content
+    def __init__(self, anthropic_api_key: str):
+        self.client = anthropic.AsyncAnthropic(api_key=anthropic_api_key)
 
     # ─── PDFタイプ判定 ────────────────────────────────────────
     def detect_pdf_type(self, pdf_bytes: bytes) -> str:
