@@ -51,6 +51,29 @@ async def health():
     return {"status": "ok", "service": "formfree-converter"}
 
 
+@app.get("/debug-key")
+async def debug_key(x_api_secret: str = Header(None)):
+    if x_api_secret != API_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    # Test Anthropic connectivity
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]},
+            )
+            return {
+                "key_prefix": key[:20],
+                "key_len": len(key),
+                "anthropic_status": r.status_code,
+                "anthropic_body": r.text[:200],
+            }
+    except Exception as e:
+        return {"key_prefix": key[:20], "key_len": len(key), "error": str(e)}
+
+
 @app.post("/convert")
 async def convert(
     request:          ConvertRequest,
