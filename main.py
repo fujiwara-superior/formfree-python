@@ -28,20 +28,7 @@ converter_service = ConversionService(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
-    logger.info(f"FormFree Python converter starting up | KEY_PREFIX={key[:15]}... LEN={len(key)}")
-    # デプロイ環境から Anthropic への疎通テスト
-    try:
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=10) as _c:
-            _r = await _c.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]},
-            )
-            logger.info(f"Anthropic connectivity test: status={_r.status_code} body={_r.text[:120]}")
-    except Exception as _e:
-        logger.error(f"Anthropic connectivity test failed: {_e}")
+    logger.info("FormFree Python converter starting up")
     yield
     logger.info("FormFree Python converter shutting down")
 
@@ -124,7 +111,7 @@ async def notify_laravel(job_id: str, status: str,
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
                 f"{LARAVEL_URL}/api/internal/job-completed",
-                headers={"X-Api-Secret": API_SECRET},
+                headers={"X-Api-Secret": API_SECRET, "Accept": "application/json"},
                 json=payload,
             )
     except Exception as e:
