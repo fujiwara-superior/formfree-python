@@ -94,33 +94,12 @@ async def run_conversion(req: ConvertRequest):
         if not result["success"]:
             raise ValueError(result["warnings"][0] if result["warnings"] else "抽出できる行がありませんでした")
 
-        # ⑤ conversion_rowsに保存
-        rows_to_insert = [
-            {
-                "job_id":    req.job_id,
-                "row_index": i,
-                "data":      row,
-                "is_edited": False,
-            }
-            for i, row in enumerate(result["rows"])
-        ]
-
-        if rows_to_insert:
-            await insert_conversion_rows(rows_to_insert)
-
-        # ⑥ jobをcompletedに更新
-        await update_job_completed(
-            job_id    = req.job_id,
-            row_count = len(result["rows"]),
-        )
-
-        # ⑦ Laravelに完了通知
-        await notify_laravel(req.job_id, "completed", len(result["rows"]))
+        # ⑤ Laravelにrowsデータを含む完了通知（LaravelがSQLiteに保存する）
+        await notify_laravel(req.job_id, "completed", rows=result["rows"])
         logger.info(f"Job {req.job_id} completed: {len(result['rows'])} rows")
 
     except Exception as e:
         logger.error(f"Job {req.job_id} failed: {e}", exc_info=True)
-        await update_job_status(req.job_id, "failed", str(e))
         await notify_laravel(req.job_id, "failed", error=str(e))
 
 
@@ -182,11 +161,12 @@ async def insert_conversion_rows(rows: list[dict]):
 
 
 async def notify_laravel(job_id: str, status: str,
-                         row_count: int = None, error: str = None):
-    """Laravelにジョブ完了を通知（メール送信のトリガー）"""
+                         rows: list = None, error: str = None):
+    """Laravelにジョブ完了を通知（rowsデータを含む）"""
     payload = {"job_id": job_id, "status": status}
-    if row_count is not None:
-        payload["row_count"] = row_count
+    if rows is not None:
+        payload["row_count"] = len(rows)
+        payload["rows"] = rows
     if error:
         payload["error"] = error
 
