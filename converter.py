@@ -13,7 +13,7 @@ import logging
 import os
 from typing import Any
 
-import anthropic
+import httpx
 import pdfplumber
 from pdf2image import convert_from_bytes
 
@@ -69,14 +69,37 @@ AUTO_DETECT_SYSTEM_PROMPT = """あなたはPDF帳票からデータを自動検�
 """
 
 
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+
+
 class ConversionService:
     def __init__(self):
         pass
 
-    def _get_client(self) -> anthropic.AsyncAnthropic:
-        key = os.environ["ANTHROPIC_API_KEY"]
-        logger.info(f"Creating Anthropic client: key_prefix={key[:20]} len={len(key)}")
-        return anthropic.AsyncAnthropic(api_key=key)
+    def _get_headers(self) -> dict:
+        key = os.environ["ANTHROPIC_API_KEY"].strip()
+        logger.info(f"Using Anthropic key: prefix={key[:20]} len={len(key)}")
+        return {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+
+    async def _call_anthropic(self, system: str, messages: list) -> str:
+        headers = self._get_headers()
+        payload = {
+            "model": "claude-sonnet-4-5",
+            "max_tokens": 4096,
+            "system": system,
+            "messages": messages,
+        }
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
+            if r.status_code != 200:
+                logger.error(f"Anthropic API error: status={r.status_code} body={r.text[:300]}")
+                r.raise_for_status()
+            data = r.json()
+            return data["content"][0]["text"]
 
     # ─── PDFタイプ判定 ────────────────────────────────────────
     def detect_pdf_type(self, pdf_bytes: bytes) -> str:
@@ -140,15 +163,8 @@ class ConversionService:
 上記のPDF内容から、指定された列のデータを全行抽出してください。"""
             system = SYSTEM_PROMPT
 
-        client = self._get_client()
-        response = await client.messages.create(
-            model      = "claude-sonnet-4-5",
-            max_tokens = 4096,
-            system     = system,
-            messages   = [{"role": "user", "content": prompt}],
-        )
-
-        return self._parse_response(response.content[0].text)
+        text_content = await self._call_anthropic(system, [{"role": "user", "content": prompt}])
+        return self._parse_response(text_content)
 
     # ─── スキャンPDF変換（Claude Vision） ────────────────────
     async def _convert_scan_pdf(
@@ -186,15 +202,8 @@ class ConversionService:
             })
             system = SYSTEM_PROMPT
 
-        client = self._get_client()
-        response = await client.messages.create(
-            model      = "claude-sonnet-4-5",
-            max_tokens = 4096,
-            system     = system,
-            messages   = [{"role": "user", "content": content}],
-        )
-
-        return self._parse_response(response.content[0].text)
+        text_content = await self._call_anthropic(system, [{"role": "user", "content": content}])
+        return self._parse_response(text_content)
 
     # ─── テキスト抽出 ─────────────────────────────────────────
     def _extract_text(self, pdf_bytes: bytes) -> str:
