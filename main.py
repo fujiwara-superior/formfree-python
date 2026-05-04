@@ -103,15 +103,17 @@ async def convert(
 
     # リクエストハンドラ時点でキーを取得してバックグラウンドタスクに渡す
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    logger.info(f"convert endpoint: key_prefix={anthropic_key[:20]} key_suffix={anthropic_key[-10:]} len={len(anthropic_key)}")
-    background_tasks.add_task(run_conversion, request, anthropic_key)
+    import socket
+    hostname = socket.gethostname()
+    logger.info(f"convert endpoint: host={hostname} key_prefix={anthropic_key[:20]} key_suffix={anthropic_key[-10:]} len={len(anthropic_key)}")
+    background_tasks.add_task(run_conversion, request, anthropic_key, hostname)
 
     return {"accepted": True, "job_id": request.job_id}
 
 
 # ─── バックグラウンド変換処理 ─────────────────────────────────
-async def run_conversion(req: ConvertRequest, anthropic_key: str):
-    logger.info(f"Starting conversion for job {req.job_id}: key_prefix={anthropic_key[:20]} key_suffix={anthropic_key[-10:]}")
+async def run_conversion(req: ConvertRequest, anthropic_key: str, hostname: str = ""):
+    logger.info(f"Starting conversion for job {req.job_id}: host={hostname} key_prefix={anthropic_key[:20]} key_suffix={anthropic_key[-10:]}")
 
     try:
         # ① PDFをbase64デコード

@@ -98,8 +98,10 @@ class ConversionService:
             r = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
             if r.status_code != 200:
                 body = r.text[:500]
-                logger.error(f"Anthropic API error: status={r.status_code} body={body}")
-                raise ValueError(f"Anthropic {r.status_code}: {body}")
+                used_key = headers.get("x-api-key", "")
+                logger.error(f"Anthropic API error: status={r.status_code} key_prefix={used_key[:20]} key_suffix={used_key[-10:]} body={body}")
+                import socket
+                raise ValueError(f"[host={socket.gethostname()} key={used_key[:15]}...{used_key[-8:]}] Anthropic {r.status_code}: {body}")
             data = r.json()
             return data["content"][0]["text"]
 
