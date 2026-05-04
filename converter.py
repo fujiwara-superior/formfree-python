@@ -96,8 +96,9 @@ class ConversionService:
         async with httpx.AsyncClient(timeout=120) as client:
             r = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
             if r.status_code != 200:
-                logger.error(f"Anthropic API error: status={r.status_code} body={r.text[:300]}")
-                r.raise_for_status()
+                body = r.text[:500]
+                logger.error(f"Anthropic API error: status={r.status_code} body={body}")
+                raise ValueError(f"Anthropic {r.status_code}: {body}")
             data = r.json()
             return data["content"][0]["text"]
 
