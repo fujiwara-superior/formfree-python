@@ -76,8 +76,9 @@ class ConversionService:
     def __init__(self):
         pass
 
-    def _get_headers(self) -> dict:
-        key = os.environ["ANTHROPIC_API_KEY"].strip()
+    def _get_headers(self, key: str = None) -> dict:
+        if key is None:
+            key = os.environ["ANTHROPIC_API_KEY"].strip()
         logger.info(f"Using Anthropic key: prefix={key[:20]} suffix={key[-10:]} len={len(key)}")
         return {
             "x-api-key": key,
@@ -85,8 +86,8 @@ class ConversionService:
             "content-type": "application/json",
         }
 
-    async def _call_anthropic(self, system: str, messages: list) -> str:
-        headers = self._get_headers()
+    async def _call_anthropic(self, system: str, messages: list, key: str = None) -> str:
+        headers = self._get_headers(key)
         payload = {
             "model": "claude-sonnet-4-5",
             "max_tokens": 4096,
@@ -118,9 +119,10 @@ class ConversionService:
     # ─── 変換メイン ───────────────────────────────────────────
     async def convert(
         self,
-        pdf_bytes: bytes,
-        pdf_type:  str,
-        columns:   list[dict],
+        pdf_bytes:     bytes,
+        pdf_type:      str,
+        columns:       list[dict],
+        anthropic_key: str = None,
     ) -> dict[str, Any]:
         """PDFをClaudeで変換してdictを返す"""
 
@@ -135,18 +137,18 @@ class ConversionService:
             )
 
         if pdf_type == "text":
-            return await self._convert_text_pdf(pdf_bytes, column_definitions, auto_detect)
+            return await self._convert_text_pdf(pdf_bytes, column_definitions, auto_detect, anthropic_key)
         else:
-            return await self._convert_scan_pdf(pdf_bytes, column_definitions, auto_detect)
+            return await self._convert_scan_pdf(pdf_bytes, column_definitions, auto_detect, anthropic_key)
 
     # ─── テキストPDF変換 ──────────────────────────────────────
     async def _convert_text_pdf(
-        self, pdf_bytes: bytes, column_definitions: str, auto_detect: bool = False
+        self, pdf_bytes: bytes, column_definitions: str, auto_detect: bool = False, anthropic_key: str = None
     ) -> dict:
         text = self._extract_text(pdf_bytes)
         if not text.strip():
             logger.warning("Text extraction failed, falling back to scan mode")
-            return await self._convert_scan_pdf(pdf_bytes, column_definitions, auto_detect)
+            return await self._convert_scan_pdf(pdf_bytes, column_definitions, auto_detect, anthropic_key)
 
         if auto_detect:
             prompt = f"""## PDFの内容
@@ -164,12 +166,12 @@ class ConversionService:
 上記のPDF内容から、指定された列のデータを全行抽出してください。"""
             system = SYSTEM_PROMPT
 
-        text_content = await self._call_anthropic(system, [{"role": "user", "content": prompt}])
+        text_content = await self._call_anthropic(system, [{"role": "user", "content": prompt}], anthropic_key)
         return self._parse_response(text_content)
 
     # ─── スキャンPDF変換（Claude Vision） ────────────────────
     async def _convert_scan_pdf(
-        self, pdf_bytes: bytes, column_definitions: str, auto_detect: bool = False
+        self, pdf_bytes: bytes, column_definitions: str, auto_detect: bool = False, anthropic_key: str = None
     ) -> dict:
         images = convert_from_bytes(pdf_bytes, dpi=200)
 
@@ -203,7 +205,7 @@ class ConversionService:
             })
             system = SYSTEM_PROMPT
 
-        text_content = await self._call_anthropic(system, [{"role": "user", "content": content}])
+        text_content = await self._call_anthropic(system, [{"role": "user", "content": content}], anthropic_key)
         return self._parse_response(text_content)
 
     # ─── テキスト抽出 ─────────────────────────────────────────

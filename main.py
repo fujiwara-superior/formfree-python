@@ -101,15 +101,17 @@ async def convert(
     if x_api_secret != API_SECRET:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # バックグラウンドで変換を開始（即座にレスポンスを返す）
-    background_tasks.add_task(run_conversion, request)
+    # リクエストハンドラ時点でキーを取得してバックグラウンドタスクに渡す
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    logger.info(f"convert endpoint: key_prefix={anthropic_key[:20]} key_suffix={anthropic_key[-10:]} len={len(anthropic_key)}")
+    background_tasks.add_task(run_conversion, request, anthropic_key)
 
     return {"accepted": True, "job_id": request.job_id}
 
 
 # ─── バックグラウンド変換処理 ─────────────────────────────────
-async def run_conversion(req: ConvertRequest):
-    logger.info(f"Starting conversion for job {req.job_id}")
+async def run_conversion(req: ConvertRequest, anthropic_key: str):
+    logger.info(f"Starting conversion for job {req.job_id}: key_prefix={anthropic_key[:20]} key_suffix={anthropic_key[-10:]}")
 
     try:
         # ① PDFをbase64デコード
@@ -119,11 +121,12 @@ async def run_conversion(req: ConvertRequest):
         # ② PDFタイプを自動判定
         actual_type = converter_service.detect_pdf_type(pdf_bytes)
 
-        # ④ Claude APIで変換
+        # ④ Claude APIで変換（キーを直接渡す）
         result = await converter_service.convert(
-            pdf_bytes = pdf_bytes,
-            pdf_type  = actual_type,
-            columns   = req.columns,
+            pdf_bytes     = pdf_bytes,
+            pdf_type      = actual_type,
+            columns       = req.columns,
+            anthropic_key = anthropic_key,
         )
 
         if not result["success"]:
