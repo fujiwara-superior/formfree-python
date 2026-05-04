@@ -46,6 +46,9 @@ class ConvertRequest(BaseModel):
 # ─── エンドポイント ───────────────────────────────────────────
 @app.get("/health")
 async def health():
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not key.startswith("sk-ant-"):
+        raise HTTPException(status_code=500, detail=f"Invalid ANTHROPIC_API_KEY: {key[:20]}")
     return {"status": "ok", "service": "formfree-converter"}
 
 
