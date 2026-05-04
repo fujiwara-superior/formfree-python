@@ -220,7 +220,10 @@ class ConversionService:
     # ─── レスポンスパース + 検証 ──────────────────────────────
     def _parse_response(self, raw: str) -> dict:
         # JSONの前後にあるマークダウンコードブロックを除去
+        import re
         raw = raw.strip()
+
+        # コードブロック除去
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -229,14 +232,28 @@ class ConversionService:
 
         try:
             result = json.loads(raw)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {e}\nRaw: {raw[:500]}")
-            return {
-                "success":    False,
-                "rows":       [],
-                "warnings":   ["AIの応答形式が不正でした。再試行してください。"],
-                "page_count": 0,
-            }
+        except json.JSONDecodeError:
+            # JSON部分だけを正規表現で抽出して再試行
+            match = re.search(r'\{.*\}', raw, re.DOTALL)
+            if match:
+                try:
+                    result = json.loads(match.group(0))
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON parse error after extraction: {e}\nRaw: {raw[:500]}")
+                    return {
+                        "success":    False,
+                        "rows":       [],
+                        "warnings":   ["AIの応答形式が不正でした。再試行してください。"],
+                        "page_count": 0,
+                    }
+            else:
+                logger.error(f"No JSON found in response\nRaw: {raw[:500]}")
+                return {
+                    "success":    False,
+                    "rows":       [],
+                    "warnings":   ["AIの応答形式が不正でした。再試行してください。"],
+                    "page_count": 0,
+                }
 
         # rowsの整合性チェック（必須）
         if result.get("success") and result.get("rows"):
