@@ -75,6 +75,23 @@ async def debug_key(x_api_secret: str = Header(None)):
     }
 
 
+@app.get("/test-convert")
+async def test_convert(x_api_secret: str = Header(None)):
+    """変換コードパスと同じロジックで直接Anthropicをテスト"""
+    if x_api_secret != API_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        result = await converter_service._call_anthropic(
+            system="あなたはAIです。",
+            messages=[{"role": "user", "content": "テストです。OKと返答してください。"}],
+        )
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        return {"ok": True, "response": result[:50], "key_prefix": key[:20], "key_suffix": key[-10:]}
+    except Exception as e:
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        return {"ok": False, "error": str(e)[:200], "key_prefix": key[:20], "key_suffix": key[-10:]}
+
+
 @app.post("/convert")
 async def convert(
     request:          ConvertRequest,
