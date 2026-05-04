@@ -78,7 +78,7 @@ class ConversionService:
 
     def _get_headers(self) -> dict:
         key = os.environ["ANTHROPIC_API_KEY"].strip()
-        logger.info(f"Using Anthropic key: prefix={key[:20]} len={len(key)}")
+        logger.info(f"Using Anthropic key: prefix={key[:20]} suffix={key[-10:]} len={len(key)}")
         return {
             "x-api-key": key,
             "anthropic-version": "2023-06-01",
