@@ -251,6 +251,55 @@ class ConversionService:
         return self._parse_response(text_content)
 
     # ─── レスポンスパース + 検証 ──────────────────────────────
+    def _extract_json_robust(self, text: str) -> dict | None:
+        """複数の手法でJSONオブジェクトを抽出する"""
+        # 手法1: そのまままずパース試行
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # 手法2: 最初の'{' から対応する'}'までをブラケットカウントで抽出
+        start = text.find('{')
+        if start != -1:
+            depth = 0
+            in_string = False
+            escape_next = False
+            for i, ch in enumerate(text[start:], start):
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == '\\' and in_string:
+                    escape_next = True
+                    continue
+                if ch == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start:i + 1]
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
+
+        # 手法3: 末尾から不要なテキストを削ぎながら試行
+        end = text.rfind('}')
+        start = text.find('{')
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start:end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
+        return None
+
     def _parse_response(self, raw: str) -> dict:
         raw = raw.strip()
 
@@ -260,30 +309,15 @@ class ConversionService:
             raw = re.sub(r'\s*```$', '', raw)
         raw = raw.strip()
 
-        try:
-            result = json.loads(raw)
-        except json.JSONDecodeError:
-            # JSON部分だけを正規表現で抽出して再試行
-            match = re.search(r'\{.*\}', raw, re.DOTALL)
-            if match:
-                try:
-                    result = json.loads(match.group(0))
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON parse error after extraction: {e}\nRaw: {raw[:500]}")
-                    return {
-                        "success":    False,
-                        "rows":       [],
-                        "warnings":   ["AIの応答形式が不正でした。再試行してください。"],
-                        "page_count": 0,
-                    }
-            else:
-                logger.error(f"No JSON found in response\nRaw: {raw[:500]}")
-                return {
-                    "success":    False,
-                    "rows":       [],
-                    "warnings":   ["AIの応答形式が不正でした。再試行してください。"],
-                    "page_count": 0,
-                }
+        result = self._extract_json_robust(raw)
+        if result is None:
+            logger.error(f"JSON parse error after extraction: No valid JSON found\nRaw: {raw[:500]}")
+            return {
+                "success":    False,
+                "rows":       [],
+                "warnings":   ["AIの応答形式が不正でした。再試行してください。"],
+                "page_count": 0,
+            }
 
         # rowsの整合性チェック（必須）
         if result.get("success") and result.get("rows"):
